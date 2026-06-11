@@ -29,10 +29,41 @@ st.markdown("""
 """, unsafe_allow_html=True)
 st.write("---")
 
+# 🌟 ปรับเปลี่ยนชื่อคอลัมน์โหมดตามที่คุณพงษ์ศักดิ์กำหนด
 mode = st.radio(
     "📌 เลือกโหมดการทำงาน:",
-    ["📦 โหมดที่ 1: ตรวจสอบบัญชีรายชื่อยาภาพรวม", "🔍 โหมดที่ 2: ตรวจสอบการจ่ายยารายบุคคล"]
+    [
+        "📦 โหมดที่ 1: ตรวจสอบราคาขายของยาในหน่วยบริการ", 
+        "🔍 โหมดที่ 2: ตรวจสอบการจ่ายยารายบุคคล เพื่อแก้ราคาก่อนส่ง"
+    ]
 )
+
+# ==========================================
+# 📖 เพิ่มกล่องคำอธิบายแฟ้ม/คอลัมน์ที่จำเป็น (เปลี่ยนตามโหมดอัตโนมัติ)
+# ==========================================
+with st.expander("📖 รายละเอียดแฟ้มและคอลัมน์ข้อมูลที่จำเป็นต้องเตรียม", expanded=True):
+    if "โหมดที่ 1" in mode:
+        st.markdown("""
+        ### 📦 สิ่งที่ต้องเตรียมสำหรับ: โหมดตรวจสอบราคาขายของยาในหน่วยบริการ
+        โหมดนี้ใช้สำหรับ**ตรวจสอบบัญชีคลังยาทั้งหมด**เพื่อดูภาพรวมราคาและรหัส TMT ก่อนส่งออก
+        * **1. แฟ้มจาก JHCIS (รพ.สต.):** ใช้ไฟล์รายงานโครงสร้างยาหลัก (ตารางยา `cdrug`) โดยในไฟล์ Excel **ต้องมี 3 คอลัมน์หลัก** ชื่อตรงตามนี้:
+            * `ชื่อยา` (ชื่อเวชภัณฑ์) | `รหัส_TMT` (รหัสมาตรฐาน 24 หลัก) | `ราคาขาย` (ราคาของ รพ.สต.)
+        * **2. แฟ้มมาตรฐาน สปสช. (Drug Catalog):** ไฟล์ราคากลาง สปสช. ต้องมีคอลัมน์:
+            * `TMTID` | `GENERICNAME` | `UNITPRICE` | `DATEEFFECTIVE` | `DATE_APPROVED`
+        * **3. แฟ้มจาก รพร.แม่ข่าย:** ไฟล์ราคาอ้างอิงโรงพยาบาลแม่ข่าย ต้องมีคอลัมน์:
+            * `TPU List` | `ชื่อเวชภัณฑ์` | `ราคา (OPD)`
+        """)
+    else:
+        st.markdown("""
+        ### 🔍 สิ่งที่ต้องเตรียมสำหรับ: โหมดตรวจสอบการจ่ายยารายบุคคล เพื่อแก้ราคาก่อนส่ง
+        โหมดนี้ใช้สำหรับ**สแกนประวัติการจ่ายยาจริงให้ผู้ป่วย** ดักจับ Error รายคนก่อนส่งออกคีย์ e-Claim หรือ 43 แฟ้ม
+        * **1. แฟ้มจาก JHCIS (ประวัติจ่ายยา):** ใช้ไฟล์รายงานการจ่ายยา (ดึงจากตาราง `opddrug` หรือแฟ้ม `DRUG_OPD`) ในไฟล์ Excel **ต้องมี 5 คอลัมน์หลัก** ชื่อตรงตามนี้:
+            * `ชื่อยา` | `รหัส_TMT` | `ราคาขาย` (ข้อมูลยาที่จ่ายให้คนไข้)
+            * `PID` (เลขประจำตัวผู้ป่วยเพื่อใช้อ้างอิงตามประวัติ)
+            * `วันที่` (วันที่รับบริการ เพื่อเช็กว่าราคาตรงกับรอบระเบียบวันนั้นๆ ไหม)
+        * **2. แฟ้มมาตรฐาน สปสช. และ 3. แฟ้ม รพร.แม่ข่าย:** ใช้โครงสร้างคอลัมน์เหมือนโหมดที่ 1 ทุกประการ
+        """)
+
 st.write("---")
 
 # ==========================================
@@ -40,7 +71,7 @@ st.write("---")
 # ==========================================
 col1, col2, col3 = st.columns(3)
 with col1:
-    jhcis_file = st.file_uploader("🏥 1. ไฟล์จาก JHCIS (รพ.สต.)", type=["xlsx", "xls", "csv"], key="jhcis")
+    jhcis_file = st.file_uploader("🏥 1. ไฟล์ข้อมูลจาก JHCIS", type=["xlsx", "xls", "csv"], key="jhcis")
 with col2:
     nhso_file = st.file_uploader("🌐 2. ไฟล์มาตรฐาน สปสช.", type=["xlsx", "xls", "csv"], key="nhso")
 with col3:
@@ -49,39 +80,46 @@ with col3:
 if jhcis_file and nhso_file:
     try:
         df_jhcis = pd.read_csv(jhcis_file) if jhcis_file.name.endswith('csv') else pd.read_excel(jhcis_file)
+        df_jhcis.columns = df_jhcis.columns.astype(str).str.strip()
+
         df_nhso = pd.read_csv(nhso_file) if nhso_file.name.endswith('csv') else pd.read_excel(nhso_file)
+        df_nhso.columns = df_nhso.columns.astype(str).str.strip()
 
         # 🔒 ล็อคชื่อคอลัมน์มาตรฐาน (Hardcoded)
-        # 1. JHCIS
         col_drug_jhcis = "ชื่อยา"
         col_tmt_jhcis = "รหัส_TMT"
         col_price_jhcis = "ราคาขาย"
         col_pid = "PID"  
         col_date = "วันที่" 
         
-        # 2. NHSO (สปสช.)
         col_tmt_nhso = "TMTID"
         col_drug_nhso = "GENERICNAME"
         col_price_nhso = "UNITPRICE"
         col_date_eff_nhso = "DATEEFFECTIVE"
         col_date_app_nhso = "DATE_APPROVED"
 
-        # 3. RPH (รพร.แม่ข่าย)
-        col_tmt_rph = "TPU List"
+        col_tmt_rph = "TPU List" 
         col_drug_rph = "ชื่อเวชภัณฑ์"   
         col_price_rph = "ราคา (OPD)" 
 
         st.write("")
-        st.success("✅ โหลดไฟล์ระบบหลักสำเร็จ พร้อมประมวลผล (One-Click Auto Run)")
+        st.success("✅ โหลดไฟล์ระบบหลักสำเร็จ ระบบพร้อมประมวลผล (One-Click Auto Run)")
+        
         if rph_file:
             st.info("💡 ตรวจพบไฟล์อ้างอิงจาก รพร.แม่ข่าย ระบบจะดึงราคามาเทียบให้ด้วยครับ")
         
         if st.button("🚀 ประมวลผลเปรียบเทียบราคาอัตโนมัติ", type="primary", use_container_width=True):
             
-            # --- 0. ตรวจสอบว่าไฟล์มีคอลัมน์ครบไหม ---
             missing_jhcis = [c for c in [col_drug_jhcis, col_tmt_jhcis, col_price_jhcis] if c not in df_jhcis.columns]
             missing_nhso = [c for c in [col_tmt_nhso, col_drug_nhso, col_price_nhso, col_date_eff_nhso, col_date_app_nhso] if c not in df_nhso.columns]
             
+            # ตรวจเช็คเงื่อนไขเพิ่มสำหรับ โหมดที่ 2
+            if "โหมดที่ 2" in mode:
+                missing_m2 = [c for c in [col_pid, col_date] if c not in df_jhcis.columns]
+                if missing_m2:
+                    st.error(f"⚠️ โหมดที่ 2 ต้องใช้ข้อมูลประวัติรายคน ไฟล์ JHCIS ของคุณขาดคอลัมน์: {', '.join(missing_m2)}")
+                    st.stop()
+
             if missing_jhcis or missing_nhso:
                 st.error("⚠️ ไฟล์ที่อัปโหลดมีโครงสร้างไม่ตรงกับมาตรฐาน กรุณาตรวจสอบไฟล์อีกครั้ง")
                 if missing_jhcis: st.warning(f"ไฟล์ JHCIS ขาดคอลัมน์: {', '.join(missing_jhcis)}")
@@ -90,9 +128,11 @@ if jhcis_file and nhso_file:
                 
             if rph_file:
                 df_rph = pd.read_csv(rph_file) if rph_file.name.endswith('csv') else pd.read_excel(rph_file)
+                df_rph.columns = df_rph.columns.astype(str).str.strip()
+                
                 missing_rph = [c for c in [col_drug_rph, col_tmt_rph, col_price_rph] if c not in df_rph.columns]
                 if missing_rph:
-                    st.error(f"⚠️ ไฟล์ รพร. ขาดคอลัมน์: {', '.join(missing_rph)} (กรุณาตรวจสอบชื่อคอลัมน์ให้ตรงกันก่อน)")
+                    st.error(f"⚠️ ไฟล์ รพร. ขาดคอลัมน์: {', '.join(missing_rph)}")
                     st.stop()
 
             # --- 1. ทำความสะอาดรหัส TMT ---
@@ -101,8 +141,6 @@ if jhcis_file and nhso_file:
             
             keep_cols = [col_drug_jhcis, col_price_jhcis, "_clean_tmt_j"]
             if "โหมดที่ 2" in mode:
-                if col_pid not in df_jhcis.columns: df_jhcis[col_pid] = "-"
-                if col_date not in df_jhcis.columns: df_jhcis[col_date] = "-"
                 keep_cols = [col_pid, col_date] + keep_cols
                 
             # --- 2. ดึงคอลัมน์ สปสช. และตัดยาซ้ำ ---
@@ -119,7 +157,7 @@ if jhcis_file and nhso_file:
                 rph_subset = rph_subset.drop_duplicates(subset=["_clean_tmt_r"], keep="first")
                 mapped_df = pd.merge(mapped_df, rph_subset, left_on="_clean_tmt_j", right_on="_clean_tmt_r", how="left")
 
-            # --- 4. Logic เปรียบเทียบราคา (โฟกัส สปสช. เป็นหลัก) ---
+            # --- 4. Logic เปรียบเทียบราคา ---
             def check_price_logic(row):
                 tmt = str(row["_clean_tmt_j"]).strip()
                 if tmt.lower() in ["nan", "none", "", "0", "<na>"]:
@@ -140,7 +178,6 @@ if jhcis_file and nhso_file:
             mapped_df["📌 สถานะ"] = [res[0] for res in results]
             mapped_df["🛠️ วิธีแก้ไข"] = [res[1] for res in results]
 
-            # --- 5. จัดการชื่อและการแสดงผลคอลัมน์ ---
             rename_dict = {
                 col_drug_jhcis: "ชื่อยา (JHCIS)", "_clean_tmt_j": "รหัส TMT",
                 col_price_jhcis: "ราคา (JHCIS)", col_drug_nhso: "ชื่อยา (สปสช.)", 
@@ -154,7 +191,6 @@ if jhcis_file and nhso_file:
                 
             mapped_df.rename(columns=rename_dict, inplace=True)
 
-            # จัดเรียงคอลัมน์ให้ราคาอยู่ติดกัน
             cols_to_show = ["📌 สถานะ", "🛠️ วิธีแก้ไข", "รหัส TMT", "ชื่อยา (JHCIS)", "ราคา (JHCIS)", "ราคา (สปสช.)"]
             if rph_file: cols_to_show.append("ราคาอ้างอิง (รพร.)")
             cols_to_show.extend(["เริ่มใช้ (สปสช.)", "อนุมัติ (สปสช.)", "ชื่อยา (สปสช.)"])
@@ -171,9 +207,6 @@ if jhcis_file and nhso_file:
                 elif val == "✅ ราคาตรงกัน": return 'color: #008000;'
                 return ''
 
-            # ==========================================
-            # 6. แสดงผล Dashboard
-            # ==========================================
             st.divider()
             st.markdown("### 📊 ผลการตรวจสอบราคาแบบ Multi-Source (JHCIS x สปสช. x รพร.)")
             
